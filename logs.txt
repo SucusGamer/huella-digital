@@ -1,0 +1,129 @@
+=== Fingerprint Matching Service Logs - Started at 2025-12-02 16:30:18 ===
+
+[2025-12-02 16:30:18] [STARTUP] Building employee fingerprint index...
+[2025-12-02 16:30:18] [INDEX] Rebuilding employee fingerprint index from PostgreSQL (using huella_gzip column)...
+[2025-12-02 16:30:18] [INDEX] Employee 1: Processing PNG from huella column - extracting SIFT features in memory...
+[2025-12-02 16:30:18] [INDEX] Employee 1: SIFT extracted (800 keypoints) - keeping in memory only
+[2025-12-02 16:30:18] [INDEX] Employee 2: Processing PNG from huella column - extracting SIFT features in memory...
+[2025-12-02 16:30:18] [INDEX] Employee 2: SIFT extracted (801 keypoints) - keeping in memory only
+[2025-12-02 16:30:18] [INDEX] Employee 3: Processing PNG from huella column - extracting SIFT features in memory...
+[2025-12-02 16:30:18] [INDEX] Employee 3: SIFT extracted (800 keypoints) - keeping in memory only
+[2025-12-02 16:30:18] [INDEX] Employee 4: Processing PNG from huella column - extracting SIFT features in memory...
+[2025-12-02 16:30:18] [INDEX] Employee 4: SIFT extracted (800 keypoints) - keeping in memory only
+[2025-12-02 16:30:18] [INDEX] Loaded 4 employees from 4 total
+[2025-12-02 16:30:18] [INDEX]   - GZIP templates (loaded directly): 0
+[2025-12-02 16:30:18] [INDEX]   - PNG templates (migrated to GZIP): 4
+[2025-12-02 16:30:18] [INDEX]   - Corrupted GZIP (skipped): 0
+[2025-12-02 16:30:18] [INDEX]   - Corrupted PNG (skipped): 0
+[2025-12-02 16:30:18] [INDEX]   - Invalid format (skipped): 0
+[2025-12-02 16:30:18] [INDEX] FAISS not available; will use NumPy brute-force search with 4 employees
+[2025-12-02 16:30:18] [INDEX] Employee index ready: 4 employees loaded in memory (all GZIP SIFT)
+[2025-12-02 16:30:18] [STARTUP] Index ready: 4 employees loaded
+[2025-12-02 16:30:18] [STARTUP] Using NumPy brute-force search (install faiss-cpu for better performance)
+[2025-12-02 16:30:22] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=801x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:22] [MATCH_DEBUG] Descriptor stats - probe: mean=29.56, std=34.27; template: mean=29.80, std=34.06
+[2025-12-02 16:30:22] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=801, good_matches=15, ratio=0.75
+[2025-12-02 16:30:22] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=801x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:22] [MATCH_DEBUG] Descriptor stats - probe: mean=29.56, std=34.27; template: mean=29.97, std=33.90
+[2025-12-02 16:30:22] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=801, good_matches=15, ratio=0.75
+[2025-12-02 16:30:22] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=801x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:22] [MATCH_DEBUG] Descriptor stats - probe: mean=29.56, std=34.27; template: mean=30.11, std=33.79
+[2025-12-02 16:30:22] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=801, good_matches=11, ratio=0.75
+[2025-12-02 16:30:22] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=801x128, template_descriptors=801x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:22] [MATCH_DEBUG] Descriptor stats - probe: mean=29.56, std=34.27; template: mean=29.70, std=34.15
+[2025-12-02 16:30:22] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=801, good_matches=9, ratio=0.75
+[2025-12-02 16:30:22] [ANTI_FP] Rejecting match: best_score=15, second_best=15, margin=0 < 2
+[2025-12-02 16:30:22] [IDENTIFY] matched=False, employee_id=None, score=15, confidence=100.0%, candidates=4, time=0.093s
+[2025-12-02 16:30:24] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=800x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:24] [MATCH_DEBUG] Descriptor stats - probe: mean=30.04, std=33.85; template: mean=30.11, std=33.79
+[2025-12-02 16:30:24] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=800, good_matches=13, ratio=0.75
+[2025-12-02 16:30:24] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=800x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:24] [MATCH_DEBUG] Descriptor stats - probe: mean=30.04, std=33.85; template: mean=29.80, std=34.06
+[2025-12-02 16:30:24] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=800, good_matches=13, ratio=0.75
+[2025-12-02 16:30:24] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=800x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:24] [MATCH_DEBUG] Descriptor stats - probe: mean=30.04, std=33.85; template: mean=29.97, std=33.90
+[2025-12-02 16:30:24] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=800, good_matches=5, ratio=0.75
+[2025-12-02 16:30:24] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=800x128, template_descriptors=801x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:24] [MATCH_DEBUG] Descriptor stats - probe: mean=30.04, std=33.85; template: mean=29.70, std=34.15
+[2025-12-02 16:30:24] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=800, good_matches=4, ratio=0.75
+[2025-12-02 16:30:24] [ANTI_FP] Rejecting match: best_score=13, second_best=13, margin=0 < 2
+[2025-12-02 16:30:24] [IDENTIFY] matched=False, employee_id=None, score=13, confidence=100.0%, candidates=4, time=0.092s
+[2025-12-02 16:30:26] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=801x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:26] [MATCH_DEBUG] Descriptor stats - probe: mean=29.78, std=34.07; template: mean=29.80, std=34.06
+[2025-12-02 16:30:26] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=801, good_matches=13, ratio=0.75
+[2025-12-02 16:30:26] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=801x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:26] [MATCH_DEBUG] Descriptor stats - probe: mean=29.78, std=34.07; template: mean=30.11, std=33.79
+[2025-12-02 16:30:26] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=801, good_matches=7, ratio=0.75
+[2025-12-02 16:30:26] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=801x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:26] [MATCH_DEBUG] Descriptor stats - probe: mean=29.78, std=34.07; template: mean=29.97, std=33.90
+[2025-12-02 16:30:26] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=801, good_matches=14, ratio=0.75
+[2025-12-02 16:30:26] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=801x128, template_descriptors=801x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:26] [MATCH_DEBUG] Descriptor stats - probe: mean=29.78, std=34.07; template: mean=29.70, std=34.15
+[2025-12-02 16:30:26] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=801, good_matches=10, ratio=0.75
+[2025-12-02 16:30:26] [ANTI_FP] Rejecting match: best_score=14, second_best=13, margin=1 < 2
+[2025-12-02 16:30:26] [IDENTIFY] matched=False, employee_id=None, score=14, confidence=100.0%, candidates=4, time=0.091s
+[2025-12-02 16:30:27] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=802x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:27] [MATCH_DEBUG] Descriptor stats - probe: mean=29.41, std=34.40; template: mean=29.80, std=34.06
+[2025-12-02 16:30:27] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=802, good_matches=19, ratio=0.75
+[2025-12-02 16:30:27] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=802x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:27] [MATCH_DEBUG] Descriptor stats - probe: mean=29.41, std=34.40; template: mean=30.11, std=33.79
+[2025-12-02 16:30:27] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=802, good_matches=13, ratio=0.75
+[2025-12-02 16:30:27] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=802x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:27] [MATCH_DEBUG] Descriptor stats - probe: mean=29.41, std=34.40; template: mean=29.97, std=33.90
+[2025-12-02 16:30:27] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=802, good_matches=25, ratio=0.75
+[2025-12-02 16:30:27] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=802x128, template_descriptors=801x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:27] [MATCH_DEBUG] Descriptor stats - probe: mean=29.41, std=34.40; template: mean=29.70, std=34.15
+[2025-12-02 16:30:27] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=802, good_matches=9, ratio=0.75
+[2025-12-02 16:30:27] [IDENTIFY] matched=True, employee_id=1, score=25, confidence=100.0%, candidates=4, time=0.071s
+[2025-12-02 16:30:29] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=801x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:29] [MATCH_DEBUG] Descriptor stats - probe: mean=29.79, std=34.07; template: mean=30.11, std=33.79
+[2025-12-02 16:30:29] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=801, good_matches=12, ratio=0.75
+[2025-12-02 16:30:29] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=801x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:29] [MATCH_DEBUG] Descriptor stats - probe: mean=29.79, std=34.07; template: mean=29.80, std=34.06
+[2025-12-02 16:30:29] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=801, good_matches=10, ratio=0.75
+[2025-12-02 16:30:29] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=801x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:29] [MATCH_DEBUG] Descriptor stats - probe: mean=29.79, std=34.07; template: mean=29.97, std=33.90
+[2025-12-02 16:30:29] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=801, good_matches=9, ratio=0.75
+[2025-12-02 16:30:29] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=801x128, template_descriptors=801x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:29] [MATCH_DEBUG] Descriptor stats - probe: mean=29.79, std=34.07; template: mean=29.70, std=34.15
+[2025-12-02 16:30:29] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=801, good_matches=9, ratio=0.75
+[2025-12-02 16:30:29] [IDENTIFY] matched=True, employee_id=4, score=12, confidence=100.0%, candidates=4, time=0.079s
+[2025-12-02 16:30:31] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=800x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:31] [MATCH_DEBUG] Descriptor stats - probe: mean=29.45, std=34.36; template: mean=30.11, std=33.79
+[2025-12-02 16:30:31] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=800, good_matches=8, ratio=0.75
+[2025-12-02 16:30:31] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=800x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:31] [MATCH_DEBUG] Descriptor stats - probe: mean=29.45, std=34.36; template: mean=29.80, std=34.06
+[2025-12-02 16:30:31] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=800, good_matches=22, ratio=0.75
+[2025-12-02 16:30:31] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=800x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:31] [MATCH_DEBUG] Descriptor stats - probe: mean=29.45, std=34.36; template: mean=29.97, std=33.90
+[2025-12-02 16:30:31] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=800, good_matches=11, ratio=0.75
+[2025-12-02 16:30:31] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=800x128, template_descriptors=801x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:31] [MATCH_DEBUG] Descriptor stats - probe: mean=29.45, std=34.36; template: mean=29.70, std=34.15
+[2025-12-02 16:30:31] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=800, good_matches=9, ratio=0.75
+[2025-12-02 16:30:31] [IDENTIFY] matched=True, employee_id=3, score=22, confidence=100.0%, candidates=4, time=0.083s
+[2025-12-02 16:30:34] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=800x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:34] [MATCH_DEBUG] Descriptor stats - probe: mean=29.63, std=34.20; template: mean=29.80, std=34.06
+[2025-12-02 16:30:34] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=800, good_matches=13, ratio=0.75
+[2025-12-02 16:30:34] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=800x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:34] [MATCH_DEBUG] Descriptor stats - probe: mean=29.63, std=34.20; template: mean=30.11, std=33.79
+[2025-12-02 16:30:34] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=800, good_matches=11, ratio=0.75
+[2025-12-02 16:30:34] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=800x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:34] [MATCH_DEBUG] Descriptor stats - probe: mean=29.63, std=34.20; template: mean=29.97, std=33.90
+[2025-12-02 16:30:34] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=800, good_matches=16, ratio=0.75
+[2025-12-02 16:30:34] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=800x128, template_descriptors=801x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:34] [MATCH_DEBUG] Descriptor stats - probe: mean=29.63, std=34.20; template: mean=29.70, std=34.15
+[2025-12-02 16:30:34] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=800, good_matches=5, ratio=0.75
+[2025-12-02 16:30:34] [IDENTIFY] matched=True, employee_id=1, score=16, confidence=100.0%, candidates=4, time=0.080s
+[2025-12-02 16:30:36] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=801x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:36] [MATCH_DEBUG] Descriptor stats - probe: mean=29.67, std=34.17; template: mean=29.80, std=34.06
+[2025-12-02 16:30:36] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=801, good_matches=5, ratio=0.75
+[2025-12-02 16:30:36] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=801x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:36] [MATCH_DEBUG] Descriptor stats - probe: mean=29.67, std=34.17; template: mean=30.11, std=33.79
+[2025-12-02 16:30:36] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=801, good_matches=8, ratio=0.75
+[2025-12-02 16:30:36] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=801x128, template_descriptors=800x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:36] [MATCH_DEBUG] Descriptor stats - probe: mean=29.67, std=34.17; template: mean=29.97, std=33.90
+[2025-12-02 16:30:36] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=801, good_matches=13, ratio=0.75
+[2025-12-02 16:30:36] [MATCH_DEBUG] probe_identify vs template: probe_descriptors=801x128, template_descriptors=801x128, probe_dtype=float32, template_dtype=float32
+[2025-12-02 16:30:36] [MATCH_DEBUG] Descriptor stats - probe: mean=29.67, std=34.17; template: mean=29.70, std=34.15
+[2025-12-02 16:30:36] [MATCH_DEBUG] probe_identify vs template: total_knn_matches=801, good_matches=9, ratio=0.75
+[2025-12-02 16:30:36] [IDENTIFY] matched=True, employee_id=1, score=13, confidence=100.0%, candidates=4, time=0.083s
