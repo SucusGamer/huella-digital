@@ -230,12 +230,13 @@ def rebuild_employee_index():
     build SIFT-based embeddings, and keep them in memory.
     Optionally build a FAISS index for fast nearest neighbor search.
     
-    NEW RULES (using huella_gzip column):
-    - Uses 'huella_gzip' column for GZIP templates (primary source)
-    - If huella_gzip exists and starts with "H4sI": valid GZIP SIFT → load directly
-    - If huella_gzip is NULL and huella contains PNG (iVBOR): convert to GZIP, save to huella_gzip
-    - NEVER modifies the huella column (keeps PNG base64)
-    - FAISS index built ONLY from GZIP-derived embeddings in huella_gzip
+    MULTI-TEMPLATE SYSTEM (4 captures per employee):
+    - Uses huella_1..4 columns for PNG images (if huella_gzip_1..4 are NULL)
+    - Uses huella_gzip_1..4 columns for precomputed SIFT templates
+    - Stores ALL 4 templates per employee for robust matching
+    - Each employee has 4 vectors in FAISS (or 1-4 depending on num_templates)
+    - During matching: probe is compared against all 4 templates, best score wins
+    - This dramatically reduces false positives by requiring consistent match across multiple samples
     """
     global EMPLOYEE_VECTORS, EMPLOYEE_TEMPLATES, EMPLOYEE_IDS, EMPLOYEE_INDEX_READY, FAISS_INDEX
     
@@ -250,16 +251,19 @@ def rebuild_employee_index():
         conn = get_pg_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Query both huella_gzip and huella columns
+        # Query ALL 4 huella columns (both GZIP and PNG)
         cur.execute("""
             SELECT 
                 id_empleado,
-                huella_gzip,
-                huella
+                num_templates,
+                huella_gzip_1, huella_gzip_2, huella_gzip_3, huella_gzip_4,
+                huella_1, huella_2, huella_3, huella_4
             FROM rh.tbl_empleados
             WHERE activo = 1
-              AND (huella_gzip IS NOT NULL AND huella_gzip <> '')
-                 OR (huella IS NOT NULL AND huella <> '')
+              AND (
+                  (huella_gzip_1 IS NOT NULL AND huella_gzip_1 <> '')
+                  OR (huella_1 IS NOT NULL AND huella_1 <> '')
+              )
             ORDER BY id_empleado
         """)
         
@@ -276,130 +280,178 @@ def rebuild_employee_index():
             "corrupted_gzip": 0,
             "corrupted_png": 0,
             "skipped_invalid": 0,
-            "successfully_loaded": 0
+            "successfully_loaded": 0,
+            "total_templates_loaded": 0,
+            "employees_with_4_templates": 0,
+            "employees_with_less_than_4": 0
         }
         
         for row in rows:
             emp_id = row["id_empleado"]
-            huella_gzip_value = row.get("huella_gzip") or ""
-            huella_png_value = row.get("huella") or ""
+            num_templates = row.get("num_templates") or 0
             
-            # Determine format: prefer huella_gzip if available
-            template_str = None
+            # Get all 4 template columns (GZIP and PNG)
+            huella_gzip_values = [
+                row.get("huella_gzip_1") or "",
+                row.get("huella_gzip_2") or "",
+                row.get("huella_gzip_3") or "",
+                row.get("huella_gzip_4") or ""
+            ]
+            huella_png_values = [
+                row.get("huella_1") or "",
+                row.get("huella_2") or "",
+                row.get("huella_3") or "",
+                row.get("huella_4") or ""
+            ]
             
-            if huella_gzip_value and len(huella_gzip_value) >= 10:
-                # huella_gzip exists - use it directly
-                if huella_gzip_value.startswith("H4sI"):
-                    # Valid GZIP SIFT template - load directly
-                    template_str = huella_gzip_value
-                    stats["gzip_templates"] += 1
-                else:
-                    # Invalid format in huella_gzip - skip
-                    stats["skipped_invalid"] += 1
-                    log_to_file(f"[INDEX] Employee {emp_id}: huella_gzip has invalid format (doesn't start with 'H4sI') - skipping")
-                    continue
-                    
-            elif huella_png_value and len(huella_png_value) >= 10 and huella_png_value.startswith("iVBOR"):
-                # huella_gzip is NULL but huella has PNG - extract SIFT features in memory (do NOT save to DB)
-                stats["png_migrated"] += 1
-                log_to_file(f"[INDEX] Employee {emp_id}: Processing PNG from huella column - extracting SIFT features in memory...")
+            # Process each of the 4 templates for this employee
+            employee_template_features = []  # Will contain 1-4 template feature dicts
+            
+            for template_idx in range(4):
+                huella_gzip_value = huella_gzip_values[template_idx]
+                huella_png_value = huella_png_values[template_idx]
                 
-                # Decode PNG and extract SIFT features
-                try:
-                    img = _decode_image_from_b64(huella_png_value)
-                    if img is None:
-                        stats["corrupted_png"] += 1
-                        log_to_file(f"[DECODE ERROR] Employee {emp_id} skipped - PNG decode failed")
-                        continue
-                    
-                    # Extract SIFT using professional enhancement (same as enrollment)
-                    enhanced = enhance_fingerprint_professional(img)
-                    if enhanced is None:
-                        stats["corrupted_png"] += 1
-                        log_to_file(f"[DECODE ERROR] Employee {emp_id} skipped - enhancement failed")
-                        continue
-                    
-                    cleaned = apply_morphological_operations(enhanced)
-                    roi = extract_fingerprint_roi(cleaned)
-                    roi_shape = roi.shape[:2] if roi is not None else None
-                    
-                    # Extract keypoints and descriptors
-                    sift = get_sift()
-                    keypoints, descriptors = sift.detectAndCompute(roi, None)
-                    
-                    if keypoints is None or descriptors is None or len(keypoints) == 0:
-                        stats["corrupted_png"] += 1
-                        log_to_file(f"[DECODE ERROR] Employee {emp_id} skipped - no SIFT features extracted")
-                        continue
-                    
-                    # Create template features dict directly (no need to serialize/deserialize)
-                    # This avoids the database size issue with GZIP templates
-                    kp_count = len(keypoints)
-                    t_features = {
-                        "label": f"emp_{emp_id}",
-                        "success": True,
-                        "keypoints": kp_count,
-                        "descriptors": descriptors,
-                        "quality_flag": kp_count >= FP_MIN_KEYPOINTS,
-                        "quality_warn": kp_count >= FP_MIN_KEYPOINTS_WARN,
-                        "error": None,
-                        "is_precomputed": False,  # Not from GZIP
-                    }
-                    template_str = None  # No need to store GZIP format
-                    log_to_file(f"[INDEX] Employee {emp_id}: SIFT extracted ({kp_count} keypoints) - keeping in memory only")
-                    
-                except Exception as e:
-                    stats["corrupted_png"] += 1
-                    log_to_file(f"[DECODE ERROR] Employee {emp_id} skipped - exception: {e}")
+                # Skip if both are empty
+                if (not huella_gzip_value or huella_gzip_value.strip() == "") and \
+                   (not huella_png_value or huella_png_value.strip() == ""):
                     continue
-            else:
-                # No valid template found
+                
+                template_str = None
+                t_features = None
+                
+                # Determine format: prefer huella_gzip if available
+                if huella_gzip_value and len(huella_gzip_value) >= 10:
+                    # huella_gzip exists - use it directly
+                    if huella_gzip_value.startswith("H4sI"):
+                        # Valid GZIP SIFT template - load directly
+                        template_str = huella_gzip_value
+                        stats["gzip_templates"] += 1
+                    else:
+                        # Invalid format in huella_gzip - skip this template
+                        log_to_file(f"[INDEX] Employee {emp_id} template {template_idx+1}: Invalid GZIP format - skipping")
+                        continue
+                        
+                elif huella_png_value and len(huella_png_value) >= 10 and huella_png_value.startswith("iVBOR"):
+                    # huella_gzip is NULL but huella has PNG - extract SIFT features in memory
+                    stats["png_migrated"] += 1
+                    
+                    # Decode PNG and extract SIFT features
+                    try:
+                        img = _decode_image_from_b64(huella_png_value)
+                        if img is None:
+                            stats["corrupted_png"] += 1
+                            log_to_file(f"[DECODE ERROR] Employee {emp_id} template {template_idx+1}: PNG decode failed")
+                            continue
+                        
+                        # Extract SIFT using professional enhancement (same as enrollment)
+                        enhanced = enhance_fingerprint_professional(img) if FINGERPRINT_ENHANCER_AVAILABLE else enhance_fingerprint_improved(img)
+                        if enhanced is None:
+                            stats["corrupted_png"] += 1
+                            log_to_file(f"[DECODE ERROR] Employee {emp_id} template {template_idx+1}: enhancement failed")
+                            continue
+                        
+                        cleaned = apply_morphological_operations(enhanced)
+                        roi = extract_fingerprint_roi(cleaned)
+                        
+                        # Extract keypoints and descriptors
+                        sift = get_sift()
+                        keypoints, descriptors = sift.detectAndCompute(roi, None)
+                        
+                        if keypoints is None or descriptors is None or len(keypoints) == 0:
+                            stats["corrupted_png"] += 1
+                            log_to_file(f"[DECODE ERROR] Employee {emp_id} template {template_idx+1}: No SIFT features extracted")
+                            continue
+                        
+                        # Create template features dict
+                        kp_count = len(keypoints)
+                        t_features = {
+                            "label": f"emp_{emp_id}_t{template_idx+1}",
+                            "success": True,
+                            "keypoints": kp_count,
+                            "descriptors": descriptors,
+                            "quality_flag": kp_count >= FP_MIN_KEYPOINTS,
+                            "quality_warn": kp_count >= FP_MIN_KEYPOINTS_WARN,
+                            "error": None,
+                            "is_precomputed": False,
+                        }
+                        template_str = None
+                        log_to_file(f"[INDEX] Employee {emp_id} template {template_idx+1}: Extracted {kp_count} SIFT keypoints from PNG")
+                        
+                    except Exception as e:
+                        stats["corrupted_png"] += 1
+                        log_to_file(f"[DECODE ERROR] Employee {emp_id} template {template_idx+1}: Exception {e}")
+                        continue
+                else:
+                    # No valid template in this slot
+                    continue
+                
+                # Load GZIP template if needed
+                if template_str is not None:
+                    t_features = load_precomputed_template(template_str, f"emp_{emp_id}_t{template_idx+1}")
+                    if not t_features.get("success"):
+                        stats["corrupted_gzip"] += 1
+                        log_to_file(f"[GZIP ERROR] Employee {emp_id} template {template_idx+1}: Deserialization failed")
+                        continue
+                
+                # Validate t_features
+                if not isinstance(t_features, dict) or not t_features.get("success"):
+                    log_to_file(f"[ERROR] Employee {emp_id} template {template_idx+1}: Invalid features")
+                    continue
+                
+                des = t_features.get("descriptors")
+                if des is None or not isinstance(des, np.ndarray) or des.shape[0] == 0:
+                    log_to_file(f"[ERROR] Employee {emp_id} template {template_idx+1}: No descriptors")
+                    continue
+                
+                # Successfully loaded this template
+                employee_template_features.append(t_features)
+                stats["total_templates_loaded"] += 1
+            
+            # Skip employee if no valid templates loaded
+            if len(employee_template_features) == 0:
                 stats["skipped_invalid"] += 1
-                log_to_file(f"[INDEX] Employee {emp_id}: No valid template (huella_gzip is NULL and huella is not PNG) - skipping")
+                log_to_file(f"[INDEX] Employee {emp_id}: No valid templates found - skipping")
                 continue
             
-            # At this point, t_features is either:
-            # 1. Already created for PNG (in the elif clause above) with template_str=None
-            # 2. Need to be loaded from template_str for GZIP templates
+            # Track template count
+            if len(employee_template_features) == 4:
+                stats["employees_with_4_templates"] += 1
+            else:
+                stats["employees_with_less_than_4"] += 1
+                log_to_file(f"[INDEX] Employee {emp_id}: WARNING - Only {len(employee_template_features)}/4 templates loaded")
             
-            if template_str is not None:
-                # Deserialize GZIP SIFT template
-                t_features = load_precomputed_template(template_str, f"emp_{emp_id}")
-                if not t_features.get("success"):
-                    stats["corrupted_gzip"] += 1
-                    log_to_file(f"[GZIP ERROR] Employee {emp_id} skipped - deserialization failed ({t_features.get('error')})")
-                    continue
-            elif not isinstance(t_features, dict) or not t_features.get("success"):
-                # For PNG templates, t_features should already be a dict with success=True
-                # If it's not, something went wrong
-                stats["corrupted_png"] += 1
-                log_to_file(f"[PNG ERROR] Employee {emp_id} skipped - invalid features")
-                continue
+            # Create aggregated embedding from all templates (average of all descriptors)
+            # This gives a single embedding per employee for FAISS quick filtering
+            try:
+                all_descriptors = np.vstack([tf["descriptors"] for tf in employee_template_features])
+                vec = descriptors_to_vector(all_descriptors)
+            except Exception as e:
+                log_to_file(f"[INDEX] Employee {emp_id}: Error creating embedding - {e}")
+                vec = None
             
-            des = t_features.get("descriptors")
-            if des is None or des.shape[0] == 0:
-                log_to_file(f"[INDEX] Employee {emp_id}: No descriptors after loading")
-                continue
-            
-            # Generate embedding vector from descriptors (for FAISS)
-            vec = descriptors_to_vector(des)
             if vec is None:
-                log_to_file(f"[INDEX] Employee {emp_id}: could not create embedding vector (no descriptors)")
+                log_to_file(f"[INDEX] Employee {emp_id}: Could not create embedding vector - skipping")
                 continue
             
-            # Store descriptors and embedding for this employee
+            # Store ALL templates for this employee (for detailed matching)
             templates.append({
                 "employee_id": emp_id,
-                "template_features": t_features,  # Contains full descriptors for strict SIFT matching
+                "template_features_list": employee_template_features,  # List of 1-4 template dicts
+                "num_templates": len(employee_template_features)
             })
             vectors.append(vec)
             employee_ids.append(emp_id)
             stats["successfully_loaded"] += 1
+            
+            log_to_file(f"[INDEX] Employee {emp_id}: Successfully loaded {len(employee_template_features)} templates")
         
         # Log detailed statistics
         log_to_file(f"[INDEX] Loaded {stats['successfully_loaded']} employees from {stats['total_employees']} total")
+        log_to_file(f"[INDEX]   - Total templates loaded: {stats['total_templates_loaded']}")
+        log_to_file(f"[INDEX]   - Employees with 4 templates (optimal): {stats['employees_with_4_templates']}")
+        log_to_file(f"[INDEX]   - Employees with <4 templates: {stats['employees_with_less_than_4']}")
         log_to_file(f"[INDEX]   - GZIP templates (loaded directly): {stats['gzip_templates']}")
-        log_to_file(f"[INDEX]   - PNG templates (migrated to GZIP): {stats['png_migrated']}")
+        log_to_file(f"[INDEX]   - PNG templates (extracted SIFT): {stats['png_migrated']}")
         log_to_file(f"[INDEX]   - Corrupted GZIP (skipped): {stats['corrupted_gzip']}")
         log_to_file(f"[INDEX]   - Corrupted PNG (skipped): {stats['corrupted_png']}")
         log_to_file(f"[INDEX]   - Invalid format (skipped): {stats['skipped_invalid']}")
@@ -430,7 +482,7 @@ def rebuild_employee_index():
             log_to_file(f"[INDEX] FAISS not available; will use NumPy brute-force search with {len(employee_ids)} employees")
         
         EMPLOYEE_INDEX_READY = True
-        log_to_file(f"[INDEX] Employee index ready: {len(employee_ids)} employees loaded in memory (all GZIP SIFT)")
+        log_to_file(f"[INDEX] Employee index ready: {len(employee_ids)} employees with {stats['total_templates_loaded']} total templates (multi-template system)")
         return True
         
     except Exception as e:
@@ -1983,7 +2035,9 @@ def identify_employee(data: IdentifyEmployeeRequest):
             "processing_time_seconds": round(time.time() - total_start, 3),
         }
     
-    # 3) Full SIFT matching against top-k candidates using existing logic
+    # 3) Full SIFT matching against top-k candidates using MULTI-TEMPLATE system
+    # For each candidate employee, match probe against ALL their templates (1-4)
+    # and take the BEST score among them
     best_result = None
     best_employee_id = None
     threshold_override = data.threshold_override
@@ -1992,40 +2046,54 @@ def identify_employee(data: IdentifyEmployeeRequest):
     for idx in candidate_indices:
         tmpl_entry = EMPLOYEE_TEMPLATES[idx]
         emp_id = tmpl_entry["employee_id"]
-        tmpl_features = tmpl_entry["template_features"]
+        template_features_list = tmpl_entry["template_features_list"]  # List of 1-4 templates
+        num_templates = tmpl_entry["num_templates"]
         
-        # Build a template-like payload for match_feature_sets
-        # We need the same keys used in /match_templates.
-        template_features = {
-            "success": tmpl_features.get("success", True),
-            "keypoints": tmpl_features.get("keypoints", 0),
-            "descriptors": tmpl_features.get("descriptors"),
-            "quality_flag": tmpl_features.get("quality_flag", False),
-            "quality_warn": tmpl_features.get("quality_warn", False),
-            "is_precomputed": True,  # All templates from database are GZIP SIFT (precomputed)
-        }
+        # Match probe against ALL templates for this employee
+        template_results = []
+        for template_idx, tmpl_features in enumerate(template_features_list):
+            # Build template payload
+            template_features = {
+                "success": tmpl_features.get("success", True),
+                "keypoints": tmpl_features.get("keypoints", 0),
+                "descriptors": tmpl_features.get("descriptors"),
+                "quality_flag": tmpl_features.get("quality_flag", False),
+                "quality_warn": tmpl_features.get("quality_warn", False),
+                "is_precomputed": True,
+                "label": f"emp_{emp_id}_t{template_idx+1}",
+            }
+            
+            # Use strict_mode=True for identification
+            result = match_feature_sets(probe_features, template_features, threshold_override, strict_mode=True)
+            result["_is_precomputed"] = True
+            result["template_index"] = template_idx + 1
+            template_results.append(result)
         
-        # Use strict_mode=True for identification to prevent false positives
-        # No leniency applied - must meet full required_score and threshold
-        result = match_feature_sets(probe_features, template_features, threshold_override, strict_mode=True)
-        # Mark result as precomputed (for logging/debugging only, no leniency in strict mode)
-        result["_is_precomputed"] = template_features.get("is_precomputed", False)
-        result["employee_id"] = emp_id
-        candidate_results.append(result)
+        # Select BEST result among all templates for this employee
+        best_template_result = max(template_results, key=lambda r: r.get("score", 0))
+        best_template_result["employee_id"] = emp_id
+        best_template_result["num_templates_tested"] = num_templates
+        best_template_result["all_template_scores"] = [r.get("score", 0) for r in template_results]
         
+        candidate_results.append(best_template_result)
+        
+        log_to_file(f"[MULTI_TEMPLATE] Employee {emp_id}: tested {num_templates} templates, "
+                   f"scores={best_template_result['all_template_scores']}, best={best_template_result.get('score', 0)}")
+        
+        # Update overall best result
         if best_result is None:
-            best_result = result
+            best_result = best_template_result
             best_employee_id = emp_id
         else:
             # Prefer accepted matches, then higher score
-            if result.get("accepted") and not best_result.get("accepted"):
-                best_result = result
+            if best_template_result.get("accepted") and not best_result.get("accepted"):
+                best_result = best_template_result
                 best_employee_id = emp_id
-            elif result.get("accepted") and best_result.get("accepted") and result.get("score", 0) > best_result.get("score", 0):
-                best_result = result
+            elif best_template_result.get("accepted") and best_result.get("accepted") and best_template_result.get("score", 0) > best_result.get("score", 0):
+                best_result = best_template_result
                 best_employee_id = emp_id
-            elif (not best_result.get("accepted")) and result.get("score", 0) > best_result.get("score", 0):
-                best_result = result
+            elif (not best_result.get("accepted")) and best_template_result.get("score", 0) > best_result.get("score", 0):
+                best_result = best_template_result
                 best_employee_id = emp_id
     
     total_time = round(time.time() - total_start, 3)
@@ -2039,27 +2107,64 @@ def identify_employee(data: IdentifyEmployeeRequest):
             "processing_time_seconds": total_time,
         }
     
-    # ANTI-FALSE-POSITIVE: Require margin of victory over second-best candidate
-    # If multiple candidates have similar scores, reject to prevent false matches
+    # ANTI-FALSE-POSITIVE: Multi-layer validation
+    # 1. Check if match was actually accepted by match_feature_sets
+    # 2. Require significant margin of victory over second-best candidate
+    # 3. Verify minimum absolute score threshold
+    # 4. Check consistency across multiple templates (if 4 available)
+    
     if best_result.get("accepted"):
-        # Find the second-best accepted score (or best non-accepted if no other accepted)
+        best_score = best_result.get("score", 0)
+        best_emp_id = best_result.get("employee_id")
+        
+        # Layer 1: Find second-best score (from ANY other employee)
         second_best_score = 0
         for r in candidate_results:
-            if r.get("employee_id") != best_employee_id:
-                if r.get("accepted"):
-                    second_best_score = max(second_best_score, r.get("score", 0))
-                elif second_best_score == 0:  # No other accepted, use best non-accepted
-                    second_best_score = max(second_best_score, r.get("score", 0))
+            if r.get("employee_id") != best_emp_id:
+                score = r.get("score", 0)
+                if score > second_best_score:
+                    second_best_score = score
         
-        best_score = best_result.get("score", 0)
         margin_of_victory = best_score - second_best_score
         
-        # Require at least 2 points margin to prevent false positives
-        # If scores are too close, it's ambiguous and we should reject
-        if len(candidate_results) > 1 and margin_of_victory < 2:
-            log_to_file(f"[ANTI_FP] Rejecting match: best_score={best_score}, second_best={second_best_score}, margin={margin_of_victory} < 2")
+        # Layer 2: Calculate minimum required margin based on database size
+        # More employees = need larger margin to be confident
+        num_employees = len(EMPLOYEE_IDS)
+        if num_employees <= 4:
+            min_margin = 10  # Small DB: need large margin
+        elif num_employees <= 10:
+            min_margin = 12  # Medium DB: need very large margin
+        else:
+            min_margin = 15  # Large DB: need huge margin
+        
+        log_to_file(f"[ANTI_FP] Employee {best_emp_id}: best_score={best_score}, second_best={second_best_score}, "
+                   f"margin={margin_of_victory}, required_margin={min_margin}, num_employees={num_employees}")
+        
+        # Layer 3: Check margin requirement
+        if len(candidate_results) > 1 and margin_of_victory < min_margin:
+            log_to_file(f"[ANTI_FP] REJECTED: Margin too small ({margin_of_victory} < {min_margin})")
             best_result["accepted"] = False
-            best_result["reason"] = "ambiguous_match_too_close"
+            best_result["reason"] = f"ambiguous_match_margin_{margin_of_victory}<{min_margin}"
+        
+        # Layer 4: Check absolute minimum score (must be significantly high)
+        min_absolute_score = FP_ABS_MIN_SCORE if FP_ABS_MIN_SCORE > 0 else 45
+        if best_score < min_absolute_score:
+            log_to_file(f"[ANTI_FP] REJECTED: Score too low ({best_score} < {min_absolute_score})")
+            best_result["accepted"] = False
+            best_result["reason"] = f"score_too_low_{best_score}<{min_absolute_score}"
+        
+        # Layer 5: Multi-template consistency check
+        # If employee has 4 templates, at least 2 should have decent scores
+        all_template_scores = best_result.get("all_template_scores", [])
+        if len(all_template_scores) >= 3:
+            # Count how many templates had "acceptable" scores (>= 60% of best score)
+            threshold_score = best_score * 0.6
+            good_templates = sum(1 for s in all_template_scores if s >= threshold_score)
+            
+            if good_templates < 2:
+                log_to_file(f"[ANTI_FP] REJECTED: Inconsistent templates (only {good_templates}/{ len(all_template_scores)} above {threshold_score:.1f})")
+                best_result["accepted"] = False
+                best_result["reason"] = f"inconsistent_templates_{good_templates}/{len(all_template_scores)}"
     
     response = {
         "matched": bool(best_result.get("accepted")),
